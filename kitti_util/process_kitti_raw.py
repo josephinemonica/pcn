@@ -10,7 +10,7 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from open3d import *
 
-
+#python3 kitti_util/process_kitti_raw.py data/2011_09_26_drive_0002_sync 2011_09_26 0002 data/my_preprocess_result
 def load_tracklets_for_frames(n_frames, xml_path):
     """
     Loads dataset labels also referred to as tracklets, saving them individually for each frame.
@@ -141,9 +141,9 @@ if __name__ == '__main__':
                 if car_points.shape[0] > 0:
                     num_points.append(car_points.shape[0])
 
-                    pcd = PointCloud()
-                    pcd.points = Vector3dVector(car_points)
-                    write_point_cloud(os.path.join(car_dir, '%s.pcd' % car_id), pcd)
+                    pcd = geometry.PointCloud()
+                    pcd.points = utility.Vector3dVector(car_points)
+                    io.write_point_cloud(os.path.join(car_dir, '%s.pcd' % car_id), pcd)
 
                     np.savetxt(os.path.join(bbox_dir, '%s.txt' % car_id), bbox)
 

@@ -20,7 +20,7 @@ def plot_pcd(ax, pcd):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_path', default='demo_data/car.pcd')
+    parser.add_argument('--input_path', default='demo_data/lidar_final_val_9_7.pcd')
     parser.add_argument('--model_type', default='pcn_cd')
     parser.add_argument('--checkpoint', default='data/trained_models/pcn_cd')
     parser.add_argument('--num_gt_points', type=int, default=16384)
@@ -40,9 +40,19 @@ if __name__ == '__main__':
     saver = tf.train.Saver()
     saver.restore(sess, args.checkpoint)
 
-    partial = read_point_cloud(args.input_path)
+    partial = io.read_point_cloud(args.input_path)
     partial = np.array(partial.points)
     complete = sess.run(model.outputs, feed_dict={inputs: [partial], npts: [partial.shape[0]]})[0]
+    print(type(complete))
+    print(complete.shape)
+    print(complete)
+    
+    pcd_result = geometry.PointCloud()
+    pcd_result.points = utility.Vector3dVector(complete)
+    io.write_point_cloud("demo_data/output.pcd", pcd_result)
+    
+    
+
 
     fig = plt.figure(figsize=(8, 4))
     ax = fig.add_subplot(121, projection='3d')
@@ -51,5 +61,5 @@ if __name__ == '__main__':
     ax = fig.add_subplot(122, projection='3d')
     plot_pcd(ax, complete)
     ax.set_title('Output')
-    plt.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0)
+    #plt.subplots_adjust(left=0, right=1, bottom=0, top=1, wspace=0)
     plt.show()
