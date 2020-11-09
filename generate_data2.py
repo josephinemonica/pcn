@@ -10,27 +10,33 @@ Created on Mon Oct 12 22:21:07 2020
 
 import argparse
 import os
-from data_util import lmdb_dataflow
+from tqdm import tqdm
 import numpy as np
-IS_GT_COARSE = False
+np.random.seed(100)
+from data_util import lmdb_dataflow
 
 BASE_PATH = '/home/josephinemonica/Documents/gpu_link/joint_pose_and_shape_estimation/data/data-PCN/my_data'
 
-if IS_GT_COARSE:
-    BASE_PATH += '_coarse'
-    
-SAVE_INPUT_PATH_TRAIN = os.path.join(BASE_PATH, 'train', 'input')
-SAVE_GT_PATH_TRAIN = os.path.join(BASE_PATH, 'train', 'gt')
-SAVE_INPUT_PATH_VAL = os.path.join(BASE_PATH, 'val', 'input')
-SAVE_GT_PATH_VAL = os.path.join(BASE_PATH, 'val', 'gt')
+N_INPUT = 1024
+N_GT = 1024
 
-SAVE_GT_PATH_VAL_TRANSFORMED = os.path.join(BASE_PATH, 'transformed_test_data', 'gt')
-SAVE_GT_PATH_VAL_ORIGINAL = os.path.join(BASE_PATH, 'transformed_test_data', 'gt_original')
-SAVE_INPUT_PATH_VAL_TRANSFORMED = os.path.join(BASE_PATH, 'transformed_test_data', 'input')
-SAVE_POSE_PATH = os.path.join(BASE_PATH, 'transformed_test_data', 'pose')
+N_INPUT = 3000
+N_GT = 16384
+
+N_INPUT = None
+N_GT = 16384
+    
+SAVE_INPUT_PATH_TRAIN = os.path.join(BASE_PATH, 'train', 'input', '{}'.format(N_INPUT))
+SAVE_INPUT_PATH_VAL = os.path.join(BASE_PATH, 'val', 'input', '{}'.format(N_INPUT))
+SAVE_GT_PATH_TRAIN = os.path.join(BASE_PATH, 'train', 'gt', '{}'.format(N_GT))
+SAVE_GT_PATH_VAL = os.path.join(BASE_PATH, 'val', 'gt', '{}'.format(N_GT))
+
+SAVE_GT_PATH_VAL_TRANSFORMED = os.path.join(BASE_PATH, 'transformed_test_data', 'gt', '{}'.format(N_GT))
+SAVE_GT_PATH_VAL_ORIGINAL = os.path.join(BASE_PATH, 'transformed_test_data', 'gt_original', '{}'.format(N_GT))
+SAVE_INPUT_PATH_VAL_TRANSFORMED = os.path.join(BASE_PATH, 'transformed_test_data', 'input', '{}'.format(N_INPUT))
 
 ALL_DIRS = [SAVE_INPUT_PATH_TRAIN, SAVE_GT_PATH_TRAIN, SAVE_INPUT_PATH_VAL, SAVE_GT_PATH_VAL,
-            SAVE_GT_PATH_VAL_TRANSFORMED, SAVE_INPUT_PATH_VAL_TRANSFORMED, SAVE_GT_PATH_VAL_ORIGINAL, SAVE_POSE_PATH]
+            SAVE_GT_PATH_VAL_TRANSFORMED, SAVE_INPUT_PATH_VAL_TRANSFORMED, SAVE_GT_PATH_VAL_ORIGINAL]
 # my_data
 #   train
 #       input
@@ -38,12 +44,11 @@ ALL_DIRS = [SAVE_INPUT_PATH_TRAIN, SAVE_GT_PATH_TRAIN, SAVE_INPUT_PATH_VAL, SAVE
 #   val
 #       input
 #       gt
-from tqdm import tqdm
 
 def get_data(args):
 
     # Speicfy batch size just equals to 1
-    #NOTE: specifically put is_training to false, because if I put
+    # NOTE: specifically put is_training to false, because if I put
     # is_training=True, it will result to double ids in an epoch for some reason idk
     df_train, num_train = lmdb_dataflow(
         args.lmdb_train, 1, args.num_input_points, args.num_gt_points, is_training=False)
@@ -55,8 +60,7 @@ def get_data(args):
     print('==================================================================')
     print('We have {} train files and {} val files'.format(num_train, num_valid))
     print('==================================================================')
-    ###########################################################################
-    
+    ###########################################################################  
     # SAVE TRAINING
     id_train_list = []
     for step in tqdm(range(num_train)):
@@ -64,6 +68,7 @@ def get_data(args):
         
         # Sanity check
         assert inputs.shape[1] == npts[0], 'number of points do not match'
+        
         # Save input
         with open(os.path.join(SAVE_INPUT_PATH_TRAIN, '{:08d}.npy'.format(step)), 'wb') as f:
             np.save(f, inputs.reshape(-1,3))
@@ -112,6 +117,9 @@ def get_transformed_test_data(args, xmax=40., zmax=40.,):
         args.lmdb_valid, 1, args.num_input_points, args.num_gt_points, is_training=False)
     valid_gen = df_valid.get_data()
     
+    posename = 'pose1'
+    posename = 'pose_trans'
+    posename = 'pose_rot'
     print('==================================================================')
     print('We have {} val files'.format(num_valid))
     print('==================================================================')
@@ -131,8 +139,14 @@ def get_transformed_test_data(args, xmax=40., zmax=40.,):
         
         print(inputs.shape, gt.shape)
         
+        # TODO
+        save_pose_path = '/home/josephinemonica/Documents/gpu_link/joint_pose_and_shape_estimation/data/data-PCN/my_data'
+        save_pose_path = os.path.join(save_pose_path, posename)
+        with open(os.path.join(save_pose_path, '{:08d}.npy'.format(step)), 'rb') as f:
+            pose_random = np.load(f)
+            
         # Random y-rotation
-        ang = np.random.uniform(low=0., high=2.*np.pi)
+        ang = pose_random[3]
         R = np.eye(3)
         # First col (x)
         R[0,0] = np.cos(ang)
@@ -147,16 +161,13 @@ def get_transformed_test_data(args, xmax=40., zmax=40.,):
         inputs_transformed = (R@inputs.transpose()).transpose()
         
         # Random x-ztranslation
-        xtrans = np.random.uniform(low=-xmax, high=xmax)
-        ztrans = np.random.uniform(low=-zmax, high=zmax)
+        xtrans = pose_random[0]
+        ztrans = pose_random[2]
         
         gt_transformed[:,0] = gt_transformed[:,0] + xtrans
         gt_transformed[:,2] = gt_transformed[:,2] + ztrans
         inputs_transformed[:,0] = inputs_transformed[:,0] + xtrans
         inputs_transformed[:,2] = inputs_transformed[:,2] + ztrans
-        
-        # The pose
-        pose = np.array([xtrans, 0, ztrans, ang])
         
         # Save input
         with open(os.path.join(SAVE_INPUT_PATH_VAL_TRANSFORMED, '{:08d}.npy'.format(step)), 'wb') as f:
@@ -167,9 +178,6 @@ def get_transformed_test_data(args, xmax=40., zmax=40.,):
         # Save gt
         with open(os.path.join(SAVE_GT_PATH_VAL_TRANSFORMED, '{:08d}.npy'.format(step)), 'wb') as f:
             np.save(f, gt_transformed)
-        # Save pose
-        with open(os.path.join(SAVE_POSE_PATH, '{:08d}.npy'.format(step)), 'wb') as f:
-            np.save(f, pose)
             
         assert ids[0] not in id_val_list, 'Double id at step {}, id {}'.format(step, ids[0])
         id_val_list.append(ids[0])
@@ -182,13 +190,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--lmdb_train', default='data/shapenet/train.lmdb')
     parser.add_argument('--lmdb_valid', default='data/shapenet/valid.lmdb')
-    parser.add_argument('--num_input_points', type=int, default=3000)
-    
-    if IS_GT_COARSE:
-        parser.add_argument('--num_gt_points', type=int, default=1024)
-    else:
-        parser.add_argument('--num_gt_points', type=int, default=16384)
-        
+    parser.add_argument('--num_input_points', type=int, default=N_INPUT)
+    parser.add_argument('--num_gt_points', type=int, default=N_GT)
+
     args = parser.parse_args()
     
     print('--------------')
